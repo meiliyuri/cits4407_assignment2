@@ -1,0 +1,246 @@
+#!/bin/bash
+
+# This script cleans input tab-separated data and merges information from three data sources:
+# GDP data, Homicide rate data, and Life expectancy data
+
+# Declare associative arrays to store processed data
+declare -A allarray 
+declare -A gdparray
+declare -A homicarray
+declare -A lifearray
+
+# Function to process GDP data
+getgdparray()
+{
+  fn=$1
+  if [ -f ./.gdp.txt ]
+  then
+     rm ./.gdp.txt
+  fi
+  
+  # Check if the file header is tab-separated
+  headfnum=`head -1 $fn|awk -F"\t" '{print NF}'`
+  if (( headfnum!=7))
+  then
+     echo "file:$fn head is not seperate by tab"
+     exit;
+  fi
+  
+  # Process the file and extract relevant data
+  # Include only data from 2011 to 2021
+  # Remove Continent column
+  awk -F"\t" '{if(NR>1) {if((length($2)>=3)&&(($3>=2011)&&($3<=2021))) printf("%s|%s|%s;;;%s|%s|%s\n",$1,$2,$3,$4,$5,$6)}}' $fn >> ./.gdp.txt
+  totalnum=`cat ./.gdp.txt|wc -l`
+  i=1;
+  while (( i<=totalnum ))
+  do
+    line=`sed -n "${i},${i}p" ./.gdp.txt`
+    strkey=`echo $line|awk -F";;;" '{print $1}'`
+    strvalue=`echo $line|awk -F";;;" '{print $2}'`
+    gdparray[${strkey}]=${strvalue} 
+    i=$((i+1))
+  done
+}
+
+# Function to process Homicide rate data
+gethomicarray()
+{
+  fn=$1
+  
+  if [ -f ./.homic.txt ]
+  then
+     rm ./.homic.txt
+  fi
+  
+  # Check if the file header is tab-separated
+  headfnum=`head -1 $fn|awk -F"\t" '{print NF}'`
+  if (( headfnum!=4))
+  then
+     echo "file:$fn head is not seperate by tab"
+     exit;
+  fi
+  
+  # Process the file and extract relevant data
+  # Include only data from 2011 to 2021
+  # Remove Continent column
+  awk -F"\t" '{if(NR>1) {if((length($2)>=3)&&(($3>=2011)&&($3<=2021))) printf("%s|%s|%s;;;%s\n",$1,$2,$3,$4)}}' $fn|grep -v '^$' >> ./.homic.txt
+  totalnum=`cat ./.homic.txt|wc -l`
+  i=1;
+  while (( i<=totalnum ))
+  do
+    
+    line=`sed -n "${i},${i}p" ./.homic.txt`
+   # echo "line :$line"
+    strkey=`echo $line|awk -F";;;" '{print $1}'`
+    strvalue=`echo $line|awk -F";;;" '{print $2}'`
+  #  echo "strkey:$strkey strvalue:$strvalue"
+    homicarray[${strkey}]=${strvalue} 
+    i=$((i+1))
+  done
+}
+
+# Function to process Life expectancy data
+getlifearray()
+{
+  fn=$1
+  
+  if [ -f ./.life.txt ]
+  then
+     rm ./.life.txt
+  fi
+  
+  # Check if the file header is tab-separated
+  headfnum=`head -1 $fn|awk -F"\t" '{print NF}'`
+  if (( headfnum!=7))
+  then
+     echo "file:$fn head is not seperate by tab"
+     exit;
+  fi
+  
+  # Process the file and extract relevant data
+  # Include only data from 2011 to 2021
+  # Remove Continent column
+  awk -F"\t" '{if(NR>1) {if((length($2)>=3)&&(($3>=2011)&&($3<=2021))) printf("%s|%s|%s;;;%s|%s|%s\n",$1,$2,$3,$4,$5,$6)}}' $fn >> ./.life.txt
+  totalnum=`cat ./.life.txt|wc -l`
+  i=1;
+  while (( i<=totalnum ))
+  do
+    line=`sed -n "${i},${i}p" ./.life.txt`
+    strkey=`echo $line|awk -F";;;" '{print $1}'`
+    strvalue=`echo $line|awk -F";;;" '{print $2}'`
+    lifearray[${strkey}]=${strvalue} 
+    i=$((i+1))
+  done
+}
+
+# Function to merge all processed data into one array
+mergearray()
+{
+   if [ ${#gdparray[@]} -ge 1 ]
+   then
+      for item in "${!gdparray[@]}"
+      do
+         str=`echo "${gdparray[$item]}"|awk -F"|" '{printf("%s|%s",$2,$3)}'`
+         allarray[$item]=${str}"|||" 
+      done
+   fi
+   if [ ${#homicarray[@]} -ge 1 ]
+   then
+      for item in "${!homicarray[@]}"
+      do
+         str=`echo "${homicarray[$item]}"|awk -F"|" '{printf("%s",$1)}'`
+         if [ -n ${allarray[$item]} ]
+         then
+            gdpvalue=`echo "${allarray[$item]}"|awk -F"|" '{printf("%s|%s",$1,$2)}'`
+            allarray[$item]=${gdpvalue}"|${str}||"
+         else
+            allarray[$item]="||${str}||"  
+         fi
+      done
+   fi
+
+   if [ ${#lifearray[@]} -ge 1 ]
+   then
+      for item in "${!lifearray[@]}"
+      do
+         str=`echo "${lifearray[$item]}"|awk -F"|" '{printf("%s|%s",$1,$2)}'`
+         if [ -n ${allarray[$item]} ]
+         then
+            beforevalue=`echo "${allarray[$item]}"|awk -F"|" '{printf("%s|%s|%s",$1,$2,$3)}'`
+            allarray[$item]=${beforevalue}"|${str}"
+         else
+            allarray[$item]="|||${str}"
+         fi
+      done
+   fi
+   #echo "allarray length:${#allarray[@]}"
+}
+
+# Check if the number of arguments is less than 3
+if [ $# -lt 3 ]
+then
+  echo "cantril_data_cleaning file1 file2 file3"
+  exit;
+fi
+
+k=1
+for arg in "$@";
+do
+  if [ -f $arg ]
+  then
+     headline=`head -1 $arg`
+     gdpnum=`echo $headline|awk '{print index(toupper($0),"GDP PER CAPITA")}'`
+     if [ $gdpnum -ge 1 ]
+     then
+         getgdparray $arg
+         #echo "gdparray length:${#gdparray[@]}"
+         #for item in "${!gdparray[@]}"
+         #do
+         #   echo "$item|${gdparray[$item]}" >> gdp.txt
+         #done
+     fi
+    
+     homicnum=`echo $headline|awk '{print index(toupper($0),"HOMICIDE RATE PER")}'`
+     if [ $homicnum -ge 1 ]
+     then
+         gethomicarray $arg
+         #echo "homicarray length:${#homicarray[@]}"
+         #for item in "${!homicarray[@]}"
+         #do
+         #   echo "$item|${homicarray[$item]}" >> homic.txt
+         #done
+     fi
+    
+     lifenum=`echo $headline|awk '{print index(toupper($0),"LIFE EXPECTANCY")}'`
+     if [ $lifenum -ge 1 ]
+     then
+         getlifearray $arg
+         #echo "lifearray length:${#lifearray[@]}"
+         #for item in "${lifearray[@]}"
+         #do
+         #   echo "$item|${lifearray[$item]}" >> life.txt
+         #done
+     fi
+
+  else
+     echo "$arg does't exists,please check." 
+  fi
+  k=$((k+1))  
+  if (( k == 4 ))
+  then
+    break;
+  fi
+done
+
+#Merge the data from the arrays
+if [ -f ./.tmpresult.txt ]
+then
+  rm ./.tmpresult.txt
+fi
+mergearray
+
+# Output the merged data
+for item in "${!allarray[@]}"
+do
+   echo "$item|${allarray[$item]}" >> ./.tmpresult.txt
+done
+if [ -f ./.result.txt ]
+then
+   rm ./.result.txt
+fi
+
+# Add header to the result file
+echo "hello"|awk '{printf("\"Entity\"\t\"Code\"\t\"Year\"\t\"GDP per capita, PPP (constant 2017 international $)\"\t\"Population (historical estimates)\"\t\"Homicide rate per 100,000 population - Both sexes - All ages\"\t\"Life expectancy - Sex: all - Age: at birth - Variant: estimates\"\t\"Cantril ladder score\"\n");}'  |tee -a ./.result.txt
+
+# Sort the results and format them
+sort -t"|" -k 1,3 ./.tmpresult.txt|sed "s:|:\t:g" |tee -a ./.result.txt
+
+# Clean up temporary files
+if [ -f ./.tmpresult.txt ]
+then
+  rm ./.tmpresult.txt
+fi
+if [ -f ./.result.txt ]
+then
+   rm ./.result.txt
+fi
