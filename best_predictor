@@ -1,11 +1,14 @@
 #!/bin/bash
-#calculate pearson
+# This script calculates Pearson correlation coefficients.
 
 calpearson()
 {
+  # Read values from each line and store in arrays
   cat $1|awk -F"|"  '{arrgdp[NR]=$4; arrpop[NR]=$5;arrhom[NR]=$6;arrlife[NR]=$7;arrload[NR]=$8;}
   END{
        num=length(arrgdp);
+	   
+	   # Initialize totals for each variable
        for(i=1;i<=num;i++)
        {
             gdptotal+=arrgdp[i];
@@ -14,23 +17,26 @@ calpearson()
             lifetotal+=arrlife[i];
             loadtotal+=arrload[i];
        }
+	   # Calculate averages for each variable
        gdpavg=gdptotal/num;
        popavg=poptotal/num;
        homavg=homtotal/num;
        lifeavg=lifetotal/num;
        loadavg=loadtotal/num;
-       #printf("gdbavg:%f popavg:%f homavg:%f lifeavg:%f\n",gdpavg,popavg,homavg,lifeavg);  
+       #printf("gdpavg:%f popavg:%f homavg:%f lifeavg:%f\n",gdpavg,popavg,homavg,lifeavg);  
        
 
-       gdpsubtotal=0;
+       # Initialize variables for Pearson correlation calculations
+	   gdpsubtotal=0;
        popsubtotal=0;
        homsubtotal=0;
        lifesubtotal=0;
-       gdbsubsqtotal=0;
+       gdpsubsqtotal=0;
        popsubsqtotal=0;
        homsubsqtotal=0;
        lifesubsqtotal=0;
        loadsubsqtotal=0;
+	   # Calculate the sums needed for the Pearson correlation formula
        for(i=1;i<=num;i++)
        {
           gdpsubtotal+=(arrgdp[i]-gdpavg)*(arrload[i]-loadavg) ;
@@ -51,19 +57,22 @@ calpearson()
        #printf("gdpbsubsqtotal:%f popsubsqtotal:%f homsubsqtotal:%f lifesubsqtotal%f loadsubsqtotal:%f\n",gdpbsubsqtotal,popsubsqtotal,homsubsqtotal,lifesubsqtotal,loadsubsqtotal);
 
 
-       gdppearson=gdpsubtotal/(sqrt(gdpbsubsqtotal)*sqrt(loadsubsqtotal));
+       # Calculate the Pearson correlation coefficients
+	   gdppearson=gdpsubtotal/(sqrt(gdpbsubsqtotal)*sqrt(loadsubsqtotal));
        poppearson=popsubtotal/(sqrt(popsubsqtotal)*sqrt(loadsubsqtotal));
        hompearson=homsubtotal/(sqrt(homsubsqtotal)*sqrt(loadsubsqtotal));
        lifepearson=lifesubtotal/(sqrt(lifesubsqtotal)*sqrt(loadsubsqtotal));
  
-       #printf("gdppearson:%f poppearson:%f hompearson:%f  lifepearson:%f\n",gdppearson,poppearson,hompearson,lifepearson);
+       # Print the Pearson correlation coefficients
+	   #printf("gdppearson:%f poppearson:%f hompearson:%f  lifepearson:%f\n",gdppearson,poppearson,hompearson,lifepearson);
        printf("Mean correlation of Homicide rate with Cantril ladder is %f\n",hompearson);
        printf("Mean correlation of GDP with Cantril ladder is %f\n",gdppearson);
-       printf("Mean correlation of Population Rate with Cantril ladder is %f\n",poppearson);
+       printf("Mean correlation of Population with Cantril ladder is %f\n",poppearson);
        printf("Mean correlation of Life Expectancy with Cantril ladder is %f\n",lifepearson);
 
       
-       maxvalue=0;
+       # Determine the most predictive variable
+	   maxvalue=0;
        sstr1=""
        if(hompearson*hompearson > maxvalue*maxvalue)
        {
@@ -89,12 +98,14 @@ calpearson()
            maxvalue=lifepearson;
            sstr1="Life Expectancy"
        }
+	   # Print the most predictive variable
        printf("Most predictive mean correlation with the Cantril ladder is %s (r = %f)\n",sstr1,maxvalue);
 
 
   } '
 }
 
+# Check if the script is provided with the correct number of arguments
 if [ $# -lt 1 ]
 then
    echo "best_predictor file"
@@ -106,34 +117,35 @@ then
   if [ -f ./.tmppearson.txt ]
   then
     rm ./.tmppearson.txt
-  fi
+  fi  
+  # Filter data: include only rows where all required columns are greater than 0
   awk -F"\t" '{if(($4>0)&&($5>0)&&($6>0)&&($7>0)&&($8>0)) printf("%s|%s|%s|%s|%s|%s|%s|%s\n",$1,$2,$3,$4,$5,$6,$7,$8);}' $1 >> ./.tmppearson.txt
-   calpearson ./.tmppearson.txt
-#   echo "cnt:$cnt"
-#  cat ./.tmppearson.txt|awk -F"|" '{print $1"|"$2}'|sort -u|while read line
-#  do
-#      echo "begin calculte country:[$line]"
-#      num=`sed "/${line}/p" ./.tmppearson.txt|wc -l`
-#      if (( num >=3))
-#      then
-#         countrycode=`echo "$line"|sed "s:|:_:g;s: :_:g"` 
-#         #echo "countrycode:$countrycode  line:$line"
-#         if [ -f ./.${countrycode}.txt ]
-#         then
-#           rm ./.${countrycode}.txt
-#         fi
-#         sed -n "/${line}/p" ./.tmppearson.txt >> ./.${countrycode}.txt
-#         #cat ./.${countrycode}.txt
-#         calpearson ./.${countrycode}.txt "${countrycode}"
-#         if [ -f ./.${countrycode}.txt ]
-#         then
-#           rm ./.${countrycode}.txt
-#         fi
-#           
-#      else
-#        echo "country [$line] valid data less 3 groups,can't calcult pearson value"
-#      fi
-#  done  
+
+  # Remove valid data file if it exists
+  if [ -f ./.validpearson.txt ]
+  then
+           rm ./.validpearson.txt
+  fi
+  
+  # Get valid countrys include at least 3 predictor-value, Cantril-value pairs for mean correlation calculation
+  cat ./.tmppearson.txt|awk -F"|" '{print $1"|"$2}'|sort -u|while read line
+  do
+       #echo "begin calculte country:[$line]"
+      num=`sed -n "/${line}/p" ./.tmppearson.txt|wc -l`
+      if (( num >=3))
+      then       
+         sed -n "/${line}/p" ./.tmppearson.txt  >> ./.validpearson.txt
+      fi
+  done 
+  
+  # Call the calpearson function with the valid data
+  calpearson ./.validpearson.txt
+  
+  # Remove the valid data file
+  if [ -f ./.validpearson.txt ]
+  then
+       rm ./.validpearson.txt
+  fi
 else
   echo "file:$1 does't exists"
 fi
